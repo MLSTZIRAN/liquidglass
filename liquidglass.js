@@ -18,7 +18,42 @@ class Spring {
 function gaussianBlur(img,r=1.5){const w=img.width,h=img.height,d=img.data,s=r/3,size=Math.ceil(r*3)*2+1,half=Math.floor(size/2),kern=new Float32Array(size);let sum=0;for(let i=0;i<size;i++){const x=i-half;kern[i]=Math.exp(-(x*x)/(2*s*s));sum+=kern[i];}for(let i=0;i<size;i++)kern[i]/=sum;const tmp=new Uint8ClampedArray(d);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let rr=0,gg=0,bb=0,aa=0;for(let k=0;k<size;k++){const sx=Math.min(w-1,Math.max(0,x+k-half)),idx=(y*w+sx)*4;rr+=d[idx]*kern[k];gg+=d[idx+1]*kern[k];bb+=d[idx+2]*kern[k];aa+=d[idx+3]*kern[k];}const idx=(y*w+x)*4;tmp[idx]=rr;tmp[idx+1]=gg;tmp[idx+2]=bb;tmp[idx+3]=aa;}const out=new Uint8ClampedArray(d);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let rr=0,gg=0,bb=0,aa=0;for(let k=0;k<size;k++){const sy=Math.min(h-1,Math.max(0,y+k-half)),idx=(sy*w+x)*4;rr+=tmp[idx]*kern[k];gg+=tmp[idx+1]*kern[k];bb+=tmp[idx+2]*kern[k];aa+=tmp[idx+3]*kern[k];}const idx=(y*w+x)*4;out[idx]=rr;out[idx+1]=gg;out[idx+2]=bb;out[idx+3]=aa;}for(let i=0;i<d.length;i++)d[i]=out[i];return img;}
 function calcDisp1D(gt,bw,fn,ri,samples=128){const eta=1/ri,res=[];function refr(nx,ny){const dot=ny,k=1-eta*eta*(1-dot*dot);if(k<0)return null;const ks=Math.sqrt(k);return[-(eta*dot+ks)*nx,eta-(eta*dot+ks)*ny];}for(let i=0;i<samples;i++){const x=i/samples,y=fn(x),dx=0.0001,y2=fn(Math.min(1,x+dx)),der=(y2-y)/dx,mag=Math.sqrt(der*der+1),n=[-der/mag,-1/mag],rf=refr(n[0],n[1]);res.push(rf?rf[0]*((y*bw+gt)/rf[1]):0);}return res;}
 function calcDisp2D(cw,ch,ow,oh,r,bw,md,pre){const dpr=window.devicePixelRatio||1,CW=Math.round(cw*dpr),CH=Math.round(ch*dpr),OW=Math.round(ow*dpr),OH=Math.round(oh*dpr),R=r*dpr,BW=bw*dpr,img=new ImageData(CW,CH);for(let i=0;i<img.data.length;i+=4){img.data[i]=128;img.data[i+1]=128;img.data[i+2]=0;img.data[i+3]=255;}const R2=R*R,Rp1Sq=(R+1)*(R+1),RmBSq=Math.max(0,(R-BW)*(R-BW)),wB=OW-R*2,hB=OH-R*2,oX=(CW-OW)/2,oY=(CH-OH)/2;for(let y1=0;y1<OH;y1++)for(let x1=0;x1<OW;x1++){const idx=((oY+y1)*CW+oX+x1)*4,isL=x1<R,isR=x1>=OW-R,isT=y1<R,isB=y1>=OH-R,x=isL?x1-R:isR?x1-R-wB:0,y=isT?y1-R:isB?y1-R-hB:0,d2=x*x+y*y,isIn=d2<=Rp1Sq&&d2>=RmBSq;if(isIn){const op=d2<R2?1:1-(Math.sqrt(d2)-R)/(Math.sqrt(Rp1Sq)-R),dfc=Math.sqrt(d2),dfs=R-dfc,cos=dfc>0?x/dfc:0,sin=dfc>0?y/dfc:0,br=Math.max(0,Math.min(1,dfs/BW)),bi=Math.floor(br*pre.length),dist=pre[Math.max(0,Math.min(bi,pre.length-1))]||0,dX=md>0?(-cos*dist)/md:0,dY=md>0?(-sin*dist)/md:0;img.data[idx]=Math.max(0,Math.min(255,128+dX*127*op));img.data[idx+1]=Math.max(0,Math.min(255,128+dY*127*op));img.data[idx+2]=0;img.data[idx+3]=Math.round(255*op);}}return img;}
-function calcSpec(ow,oh,r,bw,ang=Math.PI/3){const dpr=window.devicePixelRatio||1,W=Math.round(ow*dpr),H=Math.round(oh*dpr),R=r*dpr,ST=3*dpr,img=new ImageData(W,H);for(let i=0;i<img.data.length;i+=4){img.data[i]=255;img.data[i+1]=255;img.data[i+2]=255;img.data[i+3]=0;}const sv=[Math.cos(ang),Math.sin(ang)],R2=R*R,RpOuter=R+2.5*dpr,RpOuterSq=RpOuter*RpOuter,RmS=Math.max(0,R-ST),RmSSq=RmS*RmS,wB=W-R*2,hB=H-R*2;for(let y1=0;y1<H;y1++)for(let x1=0;x1<W;x1++){const idx=(y1*W+x1)*4,isL=x1<R,isR=x1>=W-R,isT=y1<R,isB=y1>=H-R,x=isL?x1-R:isR?x1-R-wB:0,y=isT?y1-R:isB?y1-R-hB:0,d2=x*x+y*y,isNear=d2<=RpOuterSq&&d2>=RmSSq;if(isNear){const dfc=Math.sqrt(d2),dfs=R-dfc;let eo=1;if(d2>R2){const t=(dfc-R)/(RpOuter-R);eo=1-t*t*(3-2*t);}let io=1;if(dfc<RmS+0.5*dpr){const t=(RmS+0.5*dpr-dfc)/(0.5*dpr);io=1-t*t*(3-2*t);}const op=eo*io;if(op<=0)continue;const cos=dfc>0?x/dfc:0,sin=dfc>0?-y/dfc:0,dot=Math.abs(cos*sv[0]+sin*sv[1]),er=Math.max(0,Math.min(1,dfs/ST)),sf=(1-Math.cos(er*Math.PI))/2,coef=dot*sf,sc=Math.pow(coef,0.7),color=Math.min(255,255*sc),finalOp=Math.min(255,color*sc*op);img.data[idx]=color;img.data[idx+1]=color;img.data[idx+2]=color;img.data[idx+3]=Math.round(finalOp);}}gaussianBlur(img,0.5*dpr);return img;}
+function calcSpec(ow,oh,r,bw,ang=Math.PI/3){
+  const dpr=window.devicePixelRatio||1,W=Math.round(ow*dpr),H=Math.round(oh*dpr),R=r*dpr;
+  const ST=1.5*dpr;      /* 内侧衰减带宽：越小越贴边 */
+  const OUT=1.0*dpr;     /* 外侧衰减带宽 */
+  const img=new ImageData(W,H);
+  for(let i=0;i<img.data.length;i+=4){img.data[i]=255;img.data[i+1]=255;img.data[i+2]=255;img.data[i+3]=0;}
+  const sv=[Math.cos(ang),Math.sin(ang)];
+  const wB=W-R*2,hB=H-R*2;
+  for(let y1=0;y1<H;y1++)for(let x1=0;x1<W;x1++){
+    const idx=(y1*W+x1)*4;
+    const isL=x1<R,isR=x1>=W-R,isT=y1<R,isB=y1>=H-R;
+    const x=isL?x1-R:isR?x1-R-wB:0;
+    const y=isT?y1-R:isB?y1-R-hB:0;
+    const d2=x*x+y*y;
+    const dfc=Math.sqrt(d2);
+    if(dfc>R+OUT||dfc<R-ST)continue;
+    /* 边缘最亮，向内外二次衰减 */
+    const distFromEdge=Math.abs(R-dfc);
+    const maxDist=dfc<R?ST:OUT;
+    if(maxDist<=0)continue;
+    const er=Math.min(1,distFromEdge/maxDist);
+    const sf=(1-er)*(1-er);
+    if(sf<0.005)continue;
+    const cos=dfc>0?x/dfc:0;
+    const sin=dfc>0?-y/dfc:0;
+    const dot=Math.abs(cos*sv[0]+sin*sv[1]);
+    const coef=dot*sf;
+    const sc=Math.pow(coef,0.7);
+    const color=Math.min(255,255*sc);
+    const finalOp=Math.min(255,color*sc);
+    img.data[idx]=color;img.data[idx+1]=color;img.data[idx+2]=color;
+    img.data[idx+3]=Math.round(finalOp);
+  }
+  gaussianBlur(img,0.3*dpr);
+  return img;
+}
 function imgToURL(img){const c=document.createElement("canvas");c.width=img.width;c.height=img.height;c.getContext("2d").putImageData(img,0,0);return c.toDataURL();}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const numAttr=(el,n,f)=>{const r=el.getAttribute(n);if(r===null)return f;const v=parseFloat(r);return Number.isFinite(v)?v:f;};
