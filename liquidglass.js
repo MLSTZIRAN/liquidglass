@@ -20,8 +20,8 @@ function calcDisp1D(gt,bw,fn,ri,samples=128){const eta=1/ri,res=[];function refr
 function calcDisp2D(cw,ch,ow,oh,r,bw,md,pre){const dpr=window.devicePixelRatio||1,CW=Math.round(cw*dpr),CH=Math.round(ch*dpr),OW=Math.round(ow*dpr),OH=Math.round(oh*dpr),R=r*dpr,BW=bw*dpr,img=new ImageData(CW,CH);for(let i=0;i<img.data.length;i+=4){img.data[i]=128;img.data[i+1]=128;img.data[i+2]=0;img.data[i+3]=255;}const R2=R*R,Rp1Sq=(R+1)*(R+1),RmBSq=Math.max(0,(R-BW)*(R-BW)),wB=OW-R*2,hB=OH-R*2,oX=(CW-OW)/2,oY=(CH-OH)/2;for(let y1=0;y1<OH;y1++)for(let x1=0;x1<OW;x1++){const idx=((oY+y1)*CW+oX+x1)*4,isL=x1<R,isR=x1>=OW-R,isT=y1<R,isB=y1>=OH-R,x=isL?x1-R:isR?x1-R-wB:0,y=isT?y1-R:isB?y1-R-hB:0,d2=x*x+y*y,isIn=d2<=Rp1Sq&&d2>=RmBSq;if(isIn){const op=d2<R2?1:1-(Math.sqrt(d2)-R)/(Math.sqrt(Rp1Sq)-R),dfc=Math.sqrt(d2),dfs=R-dfc,cos=dfc>0?x/dfc:0,sin=dfc>0?y/dfc:0,br=Math.max(0,Math.min(1,dfs/BW)),bi=Math.floor(br*pre.length),dist=pre[Math.max(0,Math.min(bi,pre.length-1))]||0,dX=md>0?(-cos*dist)/md:0,dY=md>0?(-sin*dist)/md:0;img.data[idx]=Math.max(0,Math.min(255,128+dX*127*op));img.data[idx+1]=Math.max(0,Math.min(255,128+dY*127*op));img.data[idx+2]=0;img.data[idx+3]=Math.round(255*op);}}return img;}
 function calcSpec(ow,oh,r,bw,ang=Math.PI/3){
   const dpr=window.devicePixelRatio||1,W=Math.round(ow*dpr),H=Math.round(oh*dpr),R=r*dpr;
-  const ST=1.5*dpr;      /* 内侧衰减带宽：越小越贴边 */
-  const OUT=1.0*dpr;     /* 外侧衰减带宽 */
+  const ST=1.5*dpr;
+  const OUT=1.0*dpr;
   const img=new ImageData(W,H);
   for(let i=0;i<img.data.length;i+=4){img.data[i]=255;img.data[i+1]=255;img.data[i+2]=255;img.data[i+3]=0;}
   const sv=[Math.cos(ang),Math.sin(ang)];
@@ -34,7 +34,6 @@ function calcSpec(ow,oh,r,bw,ang=Math.PI/3){
     const d2=x*x+y*y;
     const dfc=Math.sqrt(d2);
     if(dfc>R+OUT||dfc<R-ST)continue;
-    /* 边缘最亮，向内外二次衰减 */
     const distFromEdge=Math.abs(R-dfc);
     const maxDist=dfc<R?ST:OUT;
     if(maxDist<=0)continue;
@@ -256,7 +255,40 @@ class LiquidLens extends HTMLElement {
   }
   updateFilter(){const c=this.config;const fn=SurfaceEquations[c.surfaceType];const pre=calcDisp1D(c.glassThickness,c.bezelWidth,fn,c.refractiveIndex);c.maxDisp=Math.max(...pre.map(Math.abs));const disp=calcDisp2D(c.lensWidth,c.lensHeight,c.lensWidth,c.lensHeight,c.lensRadius,c.bezelWidth,c.maxDisp||1,pre);const spec=calcSpec(c.lensWidth,c.lensHeight,c.lensRadius,c.bezelWidth);const $=id=>this.shadowRoot.getElementById(`${this.uid}-${id}`);$('disp').setAttribute('href',imgToURL(disp));$('disp').setAttribute('width',c.lensWidth);$('disp').setAttribute('height',c.lensHeight);$('spec').setAttribute('href',imgToURL(spec));$('spec').setAttribute('width',c.lensWidth);$('spec').setAttribute('height',c.lensHeight);$('sa').setAttribute('slope',c.specularOpacity);$('blur').setAttribute('stdDeviation',c.blur);}
   startAnim(){if(!this.raf)this.raf=requestAnimationFrame(()=>this.tick());}
-  tick(){const dt=Math.min(0.032,1/60),c=this.config,st=this.state,s=this.springs;if(st.isDragging){s.scale.setTarget(1.05);s.shx.setTarget(4);s.shy.setTarget(24);s.shb.setTarget(32);s.sha.setTarget(0.25);s.boost.setTarget(1);}else{s.scale.setTarget(0.85);s.shx.setTarget(0);s.shy.setTarget(6);s.shb.setTarget(16);s.sha.setTarget(0.15);s.boost.setTarget(0.8);s.press.setTarget(0);s.rx.setTarget(0);s.ry.setTarget(0);}const velMag=Math.sqrt(st.velocityX**2+st.velocityY**2);const squish=Math.min(0.15,velMag/3000);if(velMag>50){const vxN=st.velocityX/velMag,vyN=st.velocityY/velMag;if(vxN<0){s.sx.setTarget(1-squish*0.5*Math.abs(vxN)-squish*0.5*Math.abs(vyN));s.sy.setTarget(1+squish*Math.abs(vxN)+squish*Math.abs(vyN));}else{s.sx.setTarget(1+squish*Math.abs(vxN)-squish*0.5*Math.abs(vyN));s.sy.setTarget(1+squish*Math.abs(vyN)-squish*0.5*Math.abs(vxN));}}else{s.sx.setTarget(1);s.sy.setTarget(1);}const scale=s.scale.update(dt),sx=s.sx.update(dt),sy=s.sy.update(dt);const shx=s.shx.update(dt),shy=s.shy.update(dt),shb=s.shb.update(dt),sha=s.sha.update(dt);const boost=s.boost.update(dt),rx=s.rx.update(dt),ry=s.ry.update(dt),press=s.press.update(dt);let px=s.px.update(dt),py=s.py.update(dt);if(!st.isDragging){const hostRect=this.getBoundingClientRect();const maxX=Math.max(0,hostRect.width-c.lensWidth);const maxY=Math.max(0,hostRect.height-c.lensHeight);if(px<0){px=0;s.px.value=0;if(s.px.velocity<0)s.px.velocity*=-0.4;}else if(px>maxX){px=maxX;s.px.value=maxX;if(s.px.velocity>0)s.px.velocity*=-0.4;}if(py<0){py=0;s.py.value=0;if(s.py.velocity<0)s.py.velocity*=-0.4;}else if(py>maxY){py=maxY;s.py.value=maxY;if(s.py.velocity>0)s.py.velocity*=-0.4;}}px=Math.round(px);py=Math.round(py);this.glassEl.style.left=px+'px';this.glassEl.style.top=py+'px';const psX=1+press*0.04,psY=1-press*0.04;const tSX=scale*sx*psX,tSY=scale*sy*psY;this.glassEl.style.transform=`scale(${tSX},${tSY}) rotateX(${rx}deg) rotateY(${ry}deg)`;const insetAlpha=sha*0.6;const insetSize=Math.max(4,Math.min(8,Math.min(c.lensWidth,c.lensHeight)*0.04));this.innerEl.style.boxShadow=`${shx}px ${shy}px ${shb}px rgba(0,0,0,${sha}),inset ${shx*0.3}px ${shy*0.4}px ${insetSize}px rgba(0,0,0,${insetAlpha}),inset ${-shx*0.3}px ${-shy*0.4}px ${insetSize}px rgba(255,255,255,${insetAlpha*0.8})`;const dynScale=c.refractionScale*boost;const baseScale=c.maxDisp*dynScale;this.shadowRoot.getElementById(`${this.uid}-dr`).setAttribute('scale',baseScale*(1-c.dispersion));this.shadowRoot.getElementById(`${this.uid}-dg`).setAttribute('scale',baseScale);this.shadowRoot.getElementById(`${this.uid}-db`).setAttribute('scale',baseScale*(1+c.dispersion));if(!this.useBackdropFilter&&this.cloneInnerEl.firstChild){const tx=(tSX-1)*(px+c.lensWidth/2);const ty=(tSY-1)*(py+c.lensHeight/2);this.cloneInnerEl.style.transform=`translate3d(${-px}px,${-py}px,0) scale(${1/tSX},${1/tSY}) translate3d(${tx}px,${ty}px,0)`;}if(!st.isDragging){st.velocityX*=0.95;st.velocityY*=0.95;}const settled=Object.values(s).every(x=>x.isSettled())&&Math.abs(st.velocityX)<1&&Math.abs(st.velocityY)<1;this.raf=settled?null:requestAnimationFrame(()=>this.tick());}
+  tick(){
+    const dt=Math.min(0.032,1/60),c=this.config,st=this.state,s=this.springs;
+    if(st.isDragging){
+      s.scale.setTarget(1.05);
+      s.shx.setTarget(1);s.shy.setTarget(3);s.shb.setTarget(8);s.sha.setTarget(0.1);
+      s.boost.setTarget(1);
+    }else{
+      s.scale.setTarget(0.85);
+      s.shx.setTarget(0);s.shy.setTarget(6);s.shb.setTarget(16);s.sha.setTarget(0.15);
+      s.boost.setTarget(0.8);
+      s.press.setTarget(0);s.rx.setTarget(0);s.ry.setTarget(0);
+    }
+    const velMag=Math.sqrt(st.velocityX**2+st.velocityY**2);const squish=Math.min(0.15,velMag/3000);
+    if(velMag>50){const vxN=st.velocityX/velMag,vyN=st.velocityY/velMag;if(vxN<0){s.sx.setTarget(1-squish*0.5*Math.abs(vxN)-squish*0.5*Math.abs(vyN));s.sy.setTarget(1+squish*Math.abs(vxN)+squish*Math.abs(vyN));}else{s.sx.setTarget(1+squish*Math.abs(vxN)-squish*0.5*Math.abs(vyN));s.sy.setTarget(1+squish*Math.abs(vyN)-squish*0.5*Math.abs(vxN));}}else{s.sx.setTarget(1);s.sy.setTarget(1);}
+    const scale=s.scale.update(dt),sx=s.sx.update(dt),sy=s.sy.update(dt);
+    const shx=s.shx.update(dt),shy=s.shy.update(dt),shb=s.shb.update(dt),sha=s.sha.update(dt);
+    const boost=s.boost.update(dt),rx=s.rx.update(dt),ry=s.ry.update(dt),press=s.press.update(dt);
+    let px=s.px.update(dt),py=s.py.update(dt);
+    if(!st.isDragging){const hostRect=this.getBoundingClientRect();const maxX=Math.max(0,hostRect.width-c.lensWidth);const maxY=Math.max(0,hostRect.height-c.lensHeight);if(px<0){px=0;s.px.value=0;if(s.px.velocity<0)s.px.velocity*=-0.4;}else if(px>maxX){px=maxX;s.px.value=maxX;if(s.px.velocity>0)s.px.velocity*=-0.4;}if(py<0){py=0;s.py.value=0;if(s.py.velocity<0)s.py.velocity*=-0.4;}else if(py>maxY){py=maxY;s.py.value=maxY;if(s.py.velocity>0)s.py.velocity*=-0.4;}}
+    px=Math.round(px);py=Math.round(py);
+    this.glassEl.style.left=px+'px';this.glassEl.style.top=py+'px';
+    const psX=1+press*0.04,psY=1-press*0.04;const tSX=scale*sx*psX,tSY=scale*sy*psY;
+    this.glassEl.style.transform=`scale(${tSX},${tSY}) rotateX(${rx}deg) rotateY(${ry}deg)`;
+    const insetAlpha=sha*0.6;const insetSize=Math.max(4,Math.min(8,Math.min(c.lensWidth,c.lensHeight)*0.04));
+    this.innerEl.style.boxShadow=`${shx}px ${shy}px ${shb}px rgba(0,0,0,${sha}),inset ${shx*0.3}px ${shy*0.4}px ${insetSize}px rgba(0,0,0,${insetAlpha}),inset ${-shx*0.3}px ${-shy*0.4}px ${insetSize}px rgba(255,255,255,${insetAlpha*0.8})`;
+    const dynScale=c.refractionScale*boost;const baseScale=c.maxDisp*dynScale;
+    this.shadowRoot.getElementById(`${this.uid}-dr`).setAttribute('scale',baseScale*(1-c.dispersion));
+    this.shadowRoot.getElementById(`${this.uid}-dg`).setAttribute('scale',baseScale);
+    this.shadowRoot.getElementById(`${this.uid}-db`).setAttribute('scale',baseScale*(1+c.dispersion));
+    if(!this.useBackdropFilter&&this.cloneInnerEl.firstChild){const tx=(tSX-1)*(px+c.lensWidth/2);const ty=(tSY-1)*(py+c.lensHeight/2);this.cloneInnerEl.style.transform=`translate3d(${-px}px,${-py}px,0) scale(${1/tSX},${1/tSY}) translate3d(${tx}px,${ty}px,0)`;}
+    if(!st.isDragging){st.velocityX*=0.95;st.velocityY*=0.95;}
+    const settled=Object.values(s).every(x=>x.isSettled())&&Math.abs(st.velocityX)<1&&Math.abs(st.velocityY)<1;
+    this.raf=settled?null:requestAnimationFrame(()=>this.tick());
+  }
   onDown(e){e.preventDefault();this.state.isDragging=true;this.springs.press.setTarget(1);const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;const rect=this.glassEl.getBoundingClientRect();const curScale=this.springs.scale.value;this.state.dragOffset.x=(cx-rect.left)/curScale;this.state.dragOffset.y=(cy-rect.top)/curScale;this.state.lastX=cx;this.state.lastY=cy;this.state.lastTime=performance.now();this.state.velocityX=0;this.state.velocityY=0;this.startAnim();}
   onMove(e){if(!this.state.isDragging)return;e.preventDefault();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;const hostRect=this.getBoundingClientRect();const now=performance.now(),dt=Math.max(1,now-this.state.lastTime)/1000;this.state.velocityX=(cx-this.state.lastX)/dt;this.state.velocityY=(cy-this.state.lastY)/dt;this.state.lastX=cx;this.state.lastY=cy;this.state.lastTime=now;let nx=cx-hostRect.left-this.state.dragOffset.x;let ny=cy-hostRect.top-this.state.dragOffset.y;const maxX=Math.max(0,hostRect.width-this.config.lensWidth);const maxY=Math.max(0,hostRect.height-this.config.lensHeight);nx=clamp(nx,0,maxX);ny=clamp(ny,0,maxY);nx=Math.round(nx);ny=Math.round(ny);this.glassEl.style.left=nx+'px';this.glassEl.style.top=ny+'px';this.springs.px.value=nx;this.springs.px.target=nx;this.springs.py.value=ny;this.springs.py.target=ny;const cX=this.config.lensWidth/2,cY=this.config.lensHeight/2;const offX=this.state.dragOffset.x-cX,offY=this.state.dragOffset.y-cY;const normX=clamp(offX/cX,-1,1),normY=clamp(offY/cY,-1,1);const maxTilt=12;this.springs.ry.setTarget(normX*maxTilt);this.springs.rx.setTarget(-normY*maxTilt);this.startAnim();}
   onUp(){if(!this.state.isDragging)return;this.state.isDragging=false;this.state.velocityX=0;this.state.velocityY=0;const hostRect=this.getBoundingClientRect();let cx=parseFloat(this.glassEl.style.left)||0;let cy=parseFloat(this.glassEl.style.top)||0;cx=clamp(cx,0,Math.max(0,hostRect.width-this.config.lensWidth));cy=clamp(cy,0,Math.max(0,hostRect.height-this.config.lensHeight));this.springs.px.value=cx;this.springs.px.target=cx;this.springs.px.velocity=0;this.springs.py.value=cy;this.springs.py.target=cy;this.springs.py.velocity=0;this.springs.press.setTarget(0);this.springs.rx.setTarget(0);this.springs.ry.setTarget(0);this.startAnim();}
